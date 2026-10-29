@@ -1,0 +1,136 @@
+USE GridLakehouseDB;
+
+-- =====================================================================
+-- 1. Dimension Tables
+-- =====================================================================
+
+-- Regions Dimension
+DROP EXTERNAL TABLE gold_dim_regions;
+CREATE EXTERNAL TABLE gold_dim_regions
+WITH (LOCATION = 'lakehouse/gold/dimensions/regions/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT region_id, region_name, governorate, country, population, area_km2, timezone 
+FROM silver_regions;
+
+-- Customers Dimension
+DROP EXTERNAL TABLE gold_dim_customers;
+CREATE EXTERNAL TABLE gold_dim_customers
+WITH (LOCATION = 'lakehouse/gold/dimensions/customers/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT customer_id, customer_type, region_id, priority_level 
+FROM silver_customers;
+
+-- Assets Dimension
+DROP EXTERNAL TABLE gold_dim_assets;
+CREATE EXTERNAL TABLE gold_dim_assets
+WITH (LOCATION = 'lakehouse/gold/dimensions/assets/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT asset_id, asset_name, asset_type, region_id, capacity_mva, installed_capacity_mw, operational_status 
+FROM silver_assets;
+
+-- Meters Dimension
+DROP EXTERNAL TABLE gold_dim_meters;
+CREATE EXTERNAL TABLE gold_dim_meters
+WITH (LOCATION = 'lakehouse/gold/dimensions/meters/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT meter_id, customer_id, transformer_id
+FROM silver_meters;
+
+
+USE GridLakehouseDB;
+
+-- =====================================================================
+-- 2. Fact Tables (Galaxy Schema )
+-- =====================================================================
+
+-- Billing Fact Table 
+DROP EXTERNAL TABLE gold_fact_billing;
+CREATE EXTERNAL TABLE gold_fact_billing
+WITH (LOCATION = 'lakehouse/gold/facts/billing/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    b.customer_id, 
+    c.region_id, 
+    b.billing_month, 
+    b.total_kwh_billed
+FROM silver_billing b
+LEFT JOIN silver_customers c ON b.customer_id = c.customer_id;
+
+-- Asset Operations Hourly Fact Table
+DROP EXTERNAL TABLE gold_fact_asset_operations;
+CREATE EXTERNAL TABLE gold_fact_asset_operations
+WITH (LOCATION = 'lakehouse/gold/facts/asset_operations/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    op.record_id, 
+    op.asset_id, 
+    a.region_id,
+    op.operation_time, 
+    op.generated_energy_mwh, 
+    op.available_capacity_mw,
+    op.capacity_utilization_ratio, 
+    op.load_kva, 
+    op.loading_pct,
+    op.oil_temperature_c, 
+    op.overload_flag
+FROM silver_asset_operations_hourly op
+LEFT JOIN silver_assets a ON op.asset_id = a.asset_id;
+
+-- Operational Events Fact Table
+DROP EXTERNAL TABLE gold_fact_operational_events;
+CREATE EXTERNAL TABLE gold_fact_operational_events
+WITH (LOCATION = 'lakehouse/gold/facts/operational_events/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    event_id, 
+    entity_id, 
+    region_id, 
+    event_type, 
+    severity,
+    start_time, 
+    end_time, 
+    duration_minutes, 
+    affected_customers,
+    event_status,
+    anomaly_type
+FROM silver_operational_events;
+
+-- Weather Hourly Fact Table (تم تعديل الأعمدة لتطابق silver_weather)
+DROP EXTERNAL TABLE gold_fact_weather;
+CREATE EXTERNAL TABLE gold_fact_weather
+WITH (LOCATION = 'lakehouse/gold/facts/weather/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    region_id, 
+    weather_time,
+    temperature_c,
+    solar_irradiance,
+    NEEDS_TEMP_REVIEW
+FROM silver_weather;
+
+USE GridLakehouseDB;
+
+DROP EXTERNAL TABLE silver_meter_readings;
+
+USE GridLakehouseDB;
+
+USE GridLakehouseDB;
+
+-- Meter Readings Fact Table
+DROP EXTERNAL TABLE gold_fact_meter_readings;
+CREATE EXTERNAL TABLE gold_fact_meter_readings
+WITH (LOCATION = 'lakehouse/gold/facts/meter_readings/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    r.reading_id, 
+    r.meter_id, 
+    m.customer_id, 
+    c.region_id,
+    r.reading_time, 
+    CAST(r.reading_time AS DATE) AS reading_date,
+    r.energy_consumption_kwh, 
+    r.voltage_v, 
+    r.reading_quality
+FROM silver_meter_readings r
+LEFT JOIN silver_meters m ON r.meter_id = m.meter_id
+LEFT JOIN silver_customers c ON m.customer_id = c.customer_id;
