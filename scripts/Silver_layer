@@ -1,0 +1,225 @@
+USE GridLakehouseDB;
+
+-- ==========================================
+-- 1. Regions Table
+-- ==========================================
+IF OBJECT_ID('silver_regions', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_regions;
+CREATE EXTERNAL TABLE silver_regions 
+WITH (LOCATION = 'lakehouse/silver/regions/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    region_id, region_name, governorate, country,
+    TRY_CAST(latitude AS FLOAT) AS latitude,
+    TRY_CAST(longitude AS FLOAT) AS longitude,
+    TRY_CAST(population AS BIGINT) AS population,
+    TRY_CAST(area_km2 AS FLOAT) AS area_km2,
+    timezone
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    region_id VARCHAR(50), region_name VARCHAR(100), governorate VARCHAR(100), country VARCHAR(50),
+    latitude VARCHAR(50), longitude VARCHAR(50), population VARCHAR(50), area_km2 VARCHAR(50),
+    timezone VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'regions';
+
+-- ==========================================
+-- 2. Assets Table
+-- ==========================================
+IF OBJECT_ID('silver_assets', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_assets;
+CREATE EXTERNAL TABLE silver_assets 
+WITH (LOCATION = 'lakehouse/silver/assets/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    asset_id, asset_name, asset_type, plant_type, region_id, operational_status,
+    TRY_CAST(commissioning_date AS DATE) AS commissioning_date,
+    TRY_CAST(latitude AS FLOAT) AS latitude,
+    TRY_CAST(longitude AS FLOAT) AS longitude,
+    parent_asset_id, from_substation_id, to_substation_id,
+    TRY_CAST(voltage_level_kv AS FLOAT) AS voltage_level_kv,
+    TRY_CAST(capacity_mva AS FLOAT) AS capacity_mva,
+    TRY_CAST(installed_capacity_mw AS FLOAT) AS installed_capacity_mw,
+    primary_source_id, primary_source_name, fuel_type,
+    CAST(CASE WHEN is_renewable = 'True' THEN 1 ELSE 0 END AS BIT) AS is_renewable
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    asset_id VARCHAR(50), asset_name VARCHAR(100), asset_type VARCHAR(50), plant_type VARCHAR(50), region_id VARCHAR(50),
+    operational_status VARCHAR(50), commissioning_date VARCHAR(50), latitude VARCHAR(50), longitude VARCHAR(50),
+    parent_asset_id VARCHAR(50), from_substation_id VARCHAR(50), to_substation_id VARCHAR(50),
+    voltage_level_kv VARCHAR(50), capacity_mva VARCHAR(50), installed_capacity_mw VARCHAR(50),
+    primary_source_id VARCHAR(50), primary_source_name VARCHAR(100), fuel_type VARCHAR(50), is_renewable VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'assets';
+
+-- ==========================================
+-- 3. Customers Table
+-- ==========================================
+IF OBJECT_ID('silver_customers', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_customers;
+CREATE EXTERNAL TABLE silver_customers 
+WITH (LOCATION = 'lakehouse/silver/customers/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    customer_id, customer_type, region_id,
+    TRY_CAST(contracted_capacity_kw AS FLOAT) AS contracted_capacity_kw,
+    TRY_CAST(connection_date AS DATE) AS connection_date,
+    tariff_plan, account_status
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    customer_id VARCHAR(50), customer_type VARCHAR(50), region_id VARCHAR(50),
+    contracted_capacity_kw VARCHAR(50), connection_date VARCHAR(50),
+    tariff_plan VARCHAR(50), account_status VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'customers';
+
+-- ==========================================
+-- 4. Meters Table
+-- ==========================================
+IF OBJECT_ID('silver_meters', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_meters;
+CREATE EXTERNAL TABLE silver_meters 
+WITH (LOCATION = 'lakehouse/silver/meters/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    meter_id, customer_id, meter_type,
+    TRY_CAST(meter_installation_date AS DATE) AS meter_installation_date,
+    TRY_CAST(rated_voltage_v AS FLOAT) AS rated_voltage_v,
+    meter_status, transformer_id, network_id, phase_type, communication_type
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    meter_id VARCHAR(50), customer_id VARCHAR(50), meter_type VARCHAR(50),
+    meter_installation_date VARCHAR(50), rated_voltage_v VARCHAR(50),
+    meter_status VARCHAR(50), transformer_id VARCHAR(50), network_id VARCHAR(50),
+    phase_type VARCHAR(50), communication_type VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'meters';
+
+-- ==========================================
+-- 5. Weather Hourly Table
+-- ==========================================
+IF OBJECT_ID('silver_weather', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_weather;
+CREATE EXTERNAL TABLE silver_weather 
+WITH (LOCATION = 'lakehouse/silver/weather/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    weather_record_id, region_id,
+    TRY_CAST(timestamp AS DATETIME2) AS weather_time,
+    TRY_CAST(temperature_c AS FLOAT) AS temperature_c,
+    TRY_CAST(solar_irradiance_w_m2 AS FLOAT) AS solar_irradiance,
+    TRY_CAST(wind_speed_m_s AS FLOAT) AS wind_speed_m_s,
+    TRY_CAST(humidity_pct AS FLOAT) AS humidity_pct,
+    weather_condition,
+    CAST(CASE WHEN TRY_CAST(temperature_c AS FLOAT) > 60 OR TRY_CAST(temperature_c AS FLOAT) < -10 THEN 1 ELSE 0 END AS BIT) AS NEEDS_TEMP_REVIEW
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    weather_record_id VARCHAR(50), region_id VARCHAR(50), timestamp VARCHAR(50),
+    temperature_c VARCHAR(50), solar_irradiance_w_m2 VARCHAR(50), wind_speed_m_s VARCHAR(50),
+    humidity_pct VARCHAR(50), weather_condition VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'weather_hourly';
+
+-- ==========================================
+-- 6. Asset Operations Hourly
+-- ==========================================
+IF OBJECT_ID('silver_asset_operations_hourly', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_asset_operations_hourly;
+CREATE EXTERNAL TABLE silver_asset_operations_hourly 
+WITH (LOCATION = 'lakehouse/silver/asset_operations_hourly/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    record_id, asset_id,
+    TRY_CAST(timestamp AS DATETIME2) AS operation_time,
+    TRY_CAST(generated_energy_mwh AS FLOAT) AS generated_energy_mwh,
+    TRY_CAST(available_capacity_mw AS FLOAT) AS available_capacity_mw,
+    TRY_CAST(capacity_utilization_ratio AS FLOAT) AS capacity_utilization_ratio,
+    TRY_CAST(load_kva AS FLOAT) AS load_kva,
+    TRY_CAST(loading_pct AS FLOAT) AS loading_pct,
+    TRY_CAST(oil_temperature_c AS FLOAT) AS oil_temperature_c,
+    TRY_CAST(power_factor AS FLOAT) AS power_factor,
+    operating_status,
+    CAST(CASE WHEN overload_flag = 'True' THEN 1 ELSE 0 END AS BIT) AS overload_flag,
+    notes
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    record_id VARCHAR(50), asset_id VARCHAR(50), timestamp VARCHAR(50), generated_energy_mwh VARCHAR(50),
+    available_capacity_mw VARCHAR(50), capacity_utilization_ratio VARCHAR(50), load_kva VARCHAR(50),
+    loading_pct VARCHAR(50), oil_temperature_c VARCHAR(50), power_factor VARCHAR(50),
+    operating_status VARCHAR(50), overload_flag VARCHAR(50), notes VARCHAR(500), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'asset_operations_hourly';
+
+-- ==========================================
+-- 7. Meter Readings
+-- ==========================================
+IF OBJECT_ID('silver_meter_readings', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_meter_readings;
+CREATE EXTERNAL TABLE silver_meter_readings 
+WITH (LOCATION = 'lakehouse/silver/meter_readings/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    reading_id, meter_id,
+    TRY_CAST(timestamp AS DATETIME2) AS reading_time,
+    TRY_CAST(interval_minutes AS INT) AS interval_minutes,
+    TRY_CAST(energy_consumption_kwh AS FLOAT) AS energy_consumption_kwh,
+    TRY_CAST(active_power_kw AS FLOAT) AS active_power_kw,
+    TRY_CAST(reactive_energy_kvarh AS FLOAT) AS reactive_energy_kvarh,
+    TRY_CAST(reactive_power_kvar AS FLOAT) AS reactive_power_kvar,
+    TRY_CAST(voltage_v AS FLOAT) AS voltage_v,
+    TRY_CAST(current_a AS FLOAT) AS current_a,
+    TRY_CAST(power_factor AS FLOAT) AS power_factor,
+    reading_quality, event_note
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+IF OBJECT_ID('silver_billing', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_billing;
+CREATE EXT    reading_id VARCHAR(50), meter_id VARCHAR(50), timestamp VARCHAR(50), interval_minutes VARCHAR(50),
+    energy_consumption_kwh VARCHAR(50), active_power_kw VARCHAR(50), reactive_energy_kvarh VARCHAR(50),
+    reactive_power_kvar VARCHAR(50), voltage_v VARCHAR(50), current_a VARCHAR(50),
+    power_factor VARCHAR(50), reading_quality VARCHAR(50), event_note VARCHAR(500), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'meter_readings';
+
+-- ==========================================
+-- 8. Billing Monthly
+-- ==========================================
+IF OBJECT_ID('silver_billing', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_billing;
+CREATE EXTERNAL TABLE silver_billing 
+WITH (LOCATION = 'lakehouse/silver/billing/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    bill_id,
+    NULLIF(UPPER(TRIM(customer_id)), '') AS customer_id,
+    meter_id,
+    TRY_CAST(billing_month + '-01' AS DATE) AS billing_month,
+    TRY_CAST(billed_energy_kwh AS FLOAT) AS total_kwh_billed,
+    TRY_CAST(applied_rate_egp_per_kwh AS FLOAT) AS applied_rate_egp_per_kwh,
+    TRY_CAST(fixed_charge_egp AS FLOAT) AS fixed_charge_egp,
+    TRY_CAST(amount_egp AS FLOAT) AS amount_egp,
+    CAST(CASE WHEN estimated_flag = 'True' THEN 1 ELSE 0 END AS BIT) AS estimated_flag,
+    payment_status
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    bill_id VARCHAR(50), customer_id VARCHAR(50), meter_id VARCHAR(50), billing_month VARCHAR(50),
+    billed_energy_kwh VARCHAR(50), applied_rate_egp_per_kwh VARCHAR(50), fixed_charge_egp VARCHAR(50),
+    amount_egp VARCHAR(50), estimated_flag VARCHAR(50), payment_status VARCHAR(50), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'billing_monthly';
+
+-- ==========================================
+-- 9. Operational Events
+-- ==========================================
+IF OBJECT_ID('silver_operational_events', 'U') IS NOT NULL DROP EXTERNAL TABLE silver_operational_events;
+CREATE EXTERNAL TABLE silver_operational_events 
+WITH (LOCATION = 'lakehouse/silver/operational_events/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat) 
+AS 
+SELECT 
+    event_id, event_level, entity_id, region_id, event_type, severity,
+    TRY_CAST(start_timestamp AS DATETIME2) AS start_time,
+    TRY_CAST(end_timestamp AS DATETIME2) AS end_time,
+    TRY_CAST(duration_minutes AS INT) AS duration_minutes,
+    TRY_CAST(affected_customers AS INT) AS affected_customers,
+    cause_or_code, event_status, parent_event_id, anomaly_id,
+    anomaly_type, injection_parameters, expected_detection, notes
+FROM OPENROWSET(BULK 'https://gridpulsestorage2026.dfs.core.windows.net/grid-raw-data/*.parquet', FORMAT = 'PARQUET') 
+WITH (
+    event_id VARCHAR(50), event_level VARCHAR(50), entity_id VARCHAR(50), region_id VARCHAR(50),
+    event_type VARCHAR(50), severity VARCHAR(50), start_timestamp VARCHAR(50), end_timestamp VARCHAR(50),
+    duration_minutes VARCHAR(50), affected_customers VARCHAR(50), cause_or_code VARCHAR(50),
+    event_status VARCHAR(50), parent_event_id VARCHAR(50), anomaly_id VARCHAR(50),
+    anomaly_type VARCHAR(50), injection_parameters VARCHAR(500), expected_detection VARCHAR(500), notes VARCHAR(500), table_name VARCHAR(50)
+) AS [result]
+WHERE [result].table_name = 'operational_events';
