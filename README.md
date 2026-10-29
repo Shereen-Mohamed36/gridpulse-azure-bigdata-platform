@@ -15,7 +15,7 @@
 Power distribution management has emerged as a critical challenge for utility companies. Due to severe heatwaves and fuel shortages, national rolling blackouts (**"Load Shedding"**) are increasingly common. 
 
 Conventional blind management leads to catastrophic consequences:
-* ⚠️ **Risk to Critical Facilities:** Power is inadvertently cut off from hospitals, emergency clinics, and water treatment plants.
+* **Risk to Critical Facilities:** Power is inadvertently cut off from hospitals, emergency clinics, and water treatment plants.
 *  **Unequal Distribution:** Blackouts are distributed unevenly across neighborhoods.
 *  **Hardware Damage:** Sudden voltage fluctuations (sags and spikes) when power is restored destroy expensive household appliances and sensitive medical equipment.
 
@@ -26,3 +26,4 @@ Conventional blind management leads to catastrophic consequences:
 ## 🏛️ 2. End-to-End Architecture & Data Flow
 The platform is built entirely on **Microsoft Azure**, adopting the rigorous **Medallion Architecture**:
 
+<img width="2752" height="1536" alt="final arc grid pulse_convert_png" src="https://github.com/user-attachments/assets/3c312693-55ba-42ed-87f9-cebf629e6e35" />
