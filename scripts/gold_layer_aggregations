@@ -1,0 +1,48 @@
+USE GridLakehouseDB;
+
+-- ==========================================
+-- Gold Layer: Analytical Datamarts & Aggregations
+-- ==========================================
+
+-- 1. Daily Region Energy Consumption Summary
+DROP EXTERNAL TABLE gold_region_daily_consumption;
+CREATE EXTERNAL TABLE gold_region_daily_consumption
+WITH (LOCATION = 'lakehouse/gold/region_daily_consumption/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    c.region_id,
+    CAST(r.reading_time AS DATE) AS reading_date,
+    COUNT(DISTINCT r.meter_id) AS active_meters_count,
+    SUM(r.energy_consumption_kwh) AS total_energy_kwh,
+    AVG(r.voltage_v) AS avg_voltage_v
+FROM silver_meter_readings r
+JOIN silver_meters m ON r.meter_id = m.meter_id
+JOIN silver_customers c ON m.customer_id = c.customer_id
+GROUP BY c.region_id, CAST(r.reading_time AS DATE);
+
+-- 2. Customer Monthly Billing Analytics
+DROP EXTERNAL TABLE gold_customer_monthly_analytics;
+CREATE EXTERNAL TABLE gold_customer_monthly_analytics
+WITH (LOCATION = 'lakehouse/gold/customer_monthly_analytics/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    b.customer_id,
+    c.customer_type,
+    c.region_id,
+    c.priority_level,
+    b.billing_month,
+    b.total_kwh_billed
+FROM silver_billing b
+LEFT JOIN silver_customers c ON b.customer_id = c.customer_id;
+
+-- 3. Region Asset Capacity Summary
+DROP EXTERNAL TABLE gold_asset_summary;
+CREATE EXTERNAL TABLE gold_asset_summary
+WITH (LOCATION = 'lakehouse/gold/asset_summary/', DATA_SOURCE = DataLakeStorage, FILE_FORMAT = ParquetFormat)
+AS
+SELECT 
+    region_id,
+    COUNT(asset_id) AS total_assets,
+    SUM(capacity_kw) AS total_installed_capacity
+FROM silver_assets
+GROUP BY region_id;
